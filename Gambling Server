@@ -1,0 +1,765 @@
+from flask import Flask, render_template_string, request, redirect, session
+
+import random
+
+
+
+app = Flask(__name__)
+
+app.secret_key = 'your_secret_key'
+
+
+
+# Dummy accounts data
+
+accounts = {
+
+    "Clippy": {"password": "Clippy", "chips": 1000},
+
+}
+
+
+
+# HTML templates defined as strings
+
+home_html = '''
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Home</title>
+
+</head>
+
+<body>
+
+    <h1>Welcome to the Gambling Site</h1>
+
+    <a href="/login">Login</a> | <a href="/register">Register</a>
+
+</body>
+
+</html>
+
+'''
+
+
+
+login_html = '''
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Login</title>
+
+</head>
+
+<body>
+
+    <h1>Login</h1>
+
+    <form method="POST">
+
+        <label for="username">Username:</label>
+
+        <input type="text" name="username" required>
+
+        <label for="password">Password:</label>
+
+        <input type="password" name="password" required>
+
+        <button type="submit">Login</button>
+
+    </form>
+
+</body>
+
+</html>
+
+'''
+
+
+
+register_html = '''
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Register</title>
+
+</head>
+
+<body>
+
+    <h1>Register</h1>
+
+    <form method="POST">
+
+        <label for="username">Username:</label>
+
+        <input type="text" name="username" required>
+
+        <label for="password">Password:</label>
+
+        <input type="password" name="password" required>
+
+        <button type="submit">Register</button>
+
+    </form>
+
+</body>
+
+</html>
+
+'''
+
+
+
+admin_html = '''
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Admin Panel</title>
+
+</head>
+
+<body>
+
+    <h1>Admin Panel</h1>
+
+    <table border="1">
+
+        <tr>
+
+            <th>Username</th>
+
+            <th>Chips</th>
+
+        </tr>
+
+        {% for user, info in accounts.items() %}
+
+        <tr>
+
+            <td>{{ user }}</td>
+
+            <td>{{ info.chips }}</td>
+
+        </tr>
+
+        {% endfor %}
+
+    </table>
+
+    <h2>Update Chips</h2>
+
+    <form method="POST" action="/update_chips">
+
+        <label for="target_user">Username:</label>
+
+        <input type="text" name="target_user" required>
+
+        <label for="amount">Amount:</label>
+
+        <input type="number" name="amount" required>
+
+        <button type="submit">Update</button>
+
+    </form>
+
+    <a href="/logout">Logout</a>
+
+</body>
+
+</html>
+
+'''
+
+
+
+games_html = '''
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Games</title>
+
+</head>
+
+<body>
+
+    <h1>Welcome, {{ username }}</h1>
+
+    <p>You have {{ chips }} chips.</p>
+
+    <h2>Game Options</h2>
+
+    <ul>
+
+        <li><a href="/fifty_fifty">50/50</a></li>
+
+        <li><a href="/slot_machine">Slot Machine</a></li>
+
+        <li><a href="/tenx">10x or Nothing</a></li>
+
+        <li><a href="/roulette">Roulette</a></li>
+
+    </ul>
+
+    <a href="/logout">Logout</a>
+
+</body>
+
+</html>
+
+'''
+
+
+
+fifty_fifty_html = '''
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>50/50 Game</title>
+
+</head>
+
+<body>
+
+    <h1>50/50 Game</h1>
+
+    <form method="POST">
+
+        <label for="bet">Place your bet:</label>
+
+        <input type="number" name="bet" required>
+
+        <button type="submit">Play</button>
+
+    </form>
+
+    {% if result %}
+
+    <p>{{ result }}</p>
+
+    {% endif %}
+
+    <a href="/games">Back to Games</a>
+
+</body>
+
+</html>
+
+'''
+
+
+
+slot_machine_html = '''
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Slot Machine</title>
+
+</head>
+
+<body>
+
+    <h1>Slot Machine</h1>
+
+    <form method="POST">
+
+        <label for="bet">Place your bet:</label>
+
+        <input type="number" name="bet" required>
+
+        <button type="submit">Play</button>
+
+    </form>
+
+    {% if result %}
+
+    <p>{{ result }}</p>
+
+    {% endif %}
+
+    <h2>Results:</h2>
+
+    <p>1: {{ slots[0] }} ({{ slots[0] }})</p>
+
+    <p>2: {{ slots[1] }} ({{ slots[1] }})</p>
+
+    <p>3: {{ slots[2] }} ({{ slots[2] }})</p>
+
+    <a href="/games">Back to Games</a>
+
+</body>
+
+</html>
+
+'''
+
+
+
+tenx_html = '''
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>10x or Nothing</title>
+
+</head>
+
+<body>
+
+    <h1>10x or Nothing</h1>
+
+    <form method="POST">
+
+        <button type="submit">Play</button>
+
+    </form>
+
+    {% if result %}
+
+    <p>{{ result }}</p>
+
+    {% endif %}
+
+    <a href="/games">Back to Games</a>
+
+</body>
+
+</html>
+
+'''
+
+
+
+roulette_html = '''
+
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <title>Roulette</title>
+
+</head>
+
+<body>
+
+    <h1>Roulette</h1>
+
+    <form method="POST">
+
+        <label for="bet">Place your bet:</label>
+
+        <input type="number" name="bet" required>
+
+        <label for="type">Choose your bet type:</label>
+
+        <select name="type" required>
+
+            <option value="red">Red</option>
+
+            <option value="black">Black</option>
+
+            <option value="odd">Odd</option>
+
+            <option value="even">Even</option>
+
+            {% for num in range(0, 37) %}
+
+            <option value="{{ num }}">{{ num }}</option>
+
+            {% endfor %}
+
+        </select>
+
+        <button type="submit">Play</button>
+
+    </form>
+
+    {% if result %}
+
+    <p>{{ result }}</p>
+
+    {% endif %}
+
+    <a href="/games">Back to Games</a>
+
+</body>
+
+</html>
+
+'''
+
+
+
+@app.route('/')
+
+def home():
+
+    return render_template_string(home_html)
+
+
+
+@app.route('/login', methods=['GET', 'POST'])
+
+def login():
+
+    if request.method == 'POST':
+
+        username = request.form['username']
+
+        password = request.form['password']
+
+        if username in accounts and accounts[username]['password'] == password:
+
+            session['username'] = username
+
+            return redirect('/admin' if username == 'Clippy' else '/games')
+
+    return render_template_string(login_html)
+
+
+
+@app.route('/register', methods=['GET', 'POST'])
+
+def register():
+
+    if request.method == 'POST':
+
+        username = request.form['username']
+
+        password = request.form['password']
+
+        if username not in accounts:
+
+            accounts[username] = {"password": password, "chips": 1000}
+
+            session['username'] = username
+
+            return redirect('/games')
+
+    return render_template_string(register_html)
+
+
+
+@app.route('/admin')
+
+def admin():
+
+    if 'username' in session and session['username'] == 'Clippy':
+
+        return render_template_string(admin_html, accounts=accounts)
+
+    return redirect('/')
+
+
+
+@app.route('/games')
+
+def games():
+
+    if 'username' not in session:
+
+        return redirect('/')
+
+    return render_template_string(games_html, username=session['username'], chips=accounts[session['username']]['chips'])
+
+
+
+@app.route('/logout')
+
+def logout():
+
+    session.pop('username', None)
+
+    return redirect('/')
+
+
+
+@app.route('/update_chips', methods=['POST'])
+
+def update_chips():
+
+    if 'username' in session and session['username'] == 'Clippy':
+
+        target_user = request.form['target_user']
+
+        amount = int(request.form['amount'])
+
+        if target_user in accounts:
+
+            accounts[target_user]['chips'] += amount
+
+    return redirect('/admin')
+
+
+
+@app.route('/fifty_fifty', methods=['GET', 'POST'])
+
+def fifty_fifty():
+
+    if 'username' not in session:
+
+        return redirect('/')
+
+    
+
+    result = None
+
+    if request.method == 'POST':
+
+        bet = int(request.form['bet'])
+
+        username = session['username']
+
+        if bet <= accounts[username]['chips']:
+
+            accounts[username]['chips'] -= bet
+
+            if random.random() >= 0.7:  # 30% win chance
+
+                accounts[username]['chips'] += bet * 2
+
+                result = f"You won {bet * 2} chips!"
+
+            else:
+
+                result = f"You lost {bet} chips!"
+
+        else:
+
+            result = "Insufficient chips!"
+
+    
+
+    return render_template_string(fifty_fifty_html, result=result)
+
+
+
+@app.route('/slot_machine', methods=['GET', 'POST'])
+
+def slot_machine():
+
+    if 'username' not in session:
+
+        return redirect('/')
+
+    
+
+    result = None
+
+    slots = []
+
+    emojis = ['🍒', '🍋', '🍊', '🍉', '🍇', '⭐', '💰']
+
+    emoji_names = ['Cherry', 'Lemon', 'Orange', 'Watermelon', 'Grape', 'Star', 'Money Bag']
+
+
+
+    if request.method == 'POST':
+
+        bet = int(request.form['bet'])
+
+        username = session['username']
+
+        if bet <= accounts[username]['chips']:
+
+            accounts[username]['chips'] -= bet
+
+            slots = random.choices(emojis, k=3)
+
+            if slots.count(slots[0]) == 3:  # All three slots match
+
+                winnings = bet * 10
+
+                accounts[username]['chips'] += winnings
+
+                result = f"You won {winnings} chips!"
+
+            else:
+
+                result = "You lost your bet!"
+
+        else:
+
+            result = "Insufficient chips!"
+
+    
+
+    # Convert emojis to names for display
+
+    slot_names = [emoji_names[emojis.index(slot)] for slot in slots]
+
+    
+
+    return render_template_string(slot_machine_html, slots=slot_names, result=result)
+
+
+
+@app.route('/tenx', methods=['GET', 'POST'])
+
+def tenx():
+
+    if 'username' not in session:
+
+        return redirect('/')
+
+    
+
+    result = None
+
+    if request.method == 'POST':
+
+        username = session['username']
+
+        bet = accounts[username]['chips']
+
+        accounts[username]['chips'] = 0  # Take all chips
+
+        if random.random() < 0.1:  # 10% chance to win
+
+            accounts[username]['chips'] += bet * 10
+
+            result = f"You won {bet * 10} chips!"
+
+        else:
+
+            result = "You lost all your chips!"
+
+    
+
+    return render_template_string(tenx_html, result=result)
+
+
+
+@app.route('/roulette', methods=['GET', 'POST'])
+
+def roulette():
+
+    if 'username' not in session:
+
+        return redirect('/')
+
+    
+
+    result = None
+
+    if request.method == 'POST':
+
+        bet = int(request.form['bet'])
+
+        bet_type = request.form['type']
+
+        username = session['username']
+
+        
+
+        if bet <= accounts[username]['chips']:
+
+            accounts[username]['chips'] -= bet
+
+            winning_number = random.randint(0, 36)  # Roulette numbers: 0-36
+
+            winning_color = 'red' if winning_number % 2 == 0 else 'black'  # Simplified logic
+
+
+
+            if bet_type.isdigit():  # Betting on a specific number
+
+                if int(bet_type) == winning_number:
+
+                    accounts[username]['chips'] += bet * 35  # Payout for hitting a number
+
+                    result = f"You won! Winning number was {winning_number} ({winning_color})."
+
+                else:
+
+                    result = f"You lost! Winning number was {winning_number} ({winning_color})."
+
+            elif bet_type in ['red', 'black']:  # Betting on color
+
+                if winning_color == bet_type:
+
+                    accounts[username]['chips'] += bet * 2
+
+                    result = f"You won! Winning number was {winning_number} ({winning_color})."
+
+                else:
+
+                    result = f"You lost! Winning number was {winning_number} ({winning_color})."
+
+            elif bet_type in ['odd', 'even']:  # Betting on odd/even
+
+                if (winning_number % 2 == 1 and bet_type == 'odd') or (winning_number % 2 == 0 and bet_type == 'even'):
+
+                    accounts[username]['chips'] += bet * 2
+
+                    result = f"You won! Winning number was {winning_number} ({winning_color})."
+
+                else:
+
+                    result = f"You lost! Winning number was {winning_number} ({winning_color})."
+
+        else:
+
+            result = "Insufficient chips!"
+
+
+
+    return render_template_string(roulette_html, result=result)
+
+
+
+if __name__ == "__main__":
+
+    app.run(host='0.0.0.0', port=5000, debug=True)
